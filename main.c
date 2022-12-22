@@ -1,61 +1,44 @@
-#include "main.h"
-#include <stdlib.h>
-#include <unistd.h>
-
+#include "shell.h"
 
 /**
- * on_signal - catch signals
- * @sig: A integer
+ * main - entry point
+ * @ac: arg count
+ * @av: arg vector
  *
- * Return: void
+ * Return: 0 on success, 1 on error
  */
-void on_signal(int sig)
+int main(int ac, char **av)
 {
-	(void) sig;
-}
+	info_t info[] = { INFO_INIT };
+	int fd = 2;
 
-/**
- *main - Entry point
- *@argc: An integer
- *@argv: List of command line arguments
- *
- *Return: An integer
- */
-int main(int argc, char **argv)
-{
-	char *cmd = NULL;
-	size_t cmd_size = 0;
-	char _cmd[128];
-	ssize_t cmd_len = 0;
-	char **args = NULL;
-	int status = 0;
-	int piped = !isatty(STDIN_FILENO);
+	asm ("mov %1, %0\n\t"
+		"add $3, %0"
+		: "=r" (fd)
+		: "r" (fd));
 
-	signal(SIGINT, on_signal);
-	while (1)
+	if (ac == 2)
 	{
-		if (argc > 1)
+		fd = open(av[1], O_RDONLY);
+		if (fd == -1)
 		{
-			status = exec_cmd(argv + 1, *argv);
-			exit(status);
+			if (errno == EACCES)
+				exit(126);
+			if (errno == ENOENT)
+			{
+				_eputs(av[0]);
+				_eputs(": 0: Can't open ");
+				_eputs(av[1]);
+				_eputchar('\n');
+				_eputchar(BUF_FLUSH);
+				exit(127);
+			}
+			return (EXIT_FAILURE);
 		}
-
-		if (!piped)
-			write(STDOUT_FILENO, "#cisfun$ ", 10);
-		cmd_len = _getline(&cmd, &cmd_size, STDIN_FILENO);
-		if (cmd[0] == '\n' || cmd[0] == '\0')
-		{
-			free(cmd);
-			cmd = NULL;
-			print_error(*argv, ": No such file or directory\n");
-			continue;
-		}
-		cmd[cmd_len - 1] = '\0';
-		_memcpy(_cmd, cmd, _strlen(cmd) + 1);
-		free(cmd);
-		cmd = NULL;
-		args = to_args(_cmd);
-		status = exec_cmd(args, *argv);
+		info->readfd = fd;
 	}
-	return (0);
+	populate_env_list(info);
+	read_history(info);
+	hsh(info, av);
+	return (EXIT_SUCCESS);
 }
